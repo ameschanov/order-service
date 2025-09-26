@@ -29,8 +29,8 @@ public class OrderServiceImpl implements OrderService {
     private final OrderProducer orderProducer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final String CUSTOMER_SERVICE_URL = "http://localhost:8081/customers";
-    private final String CATALOG_SERVICE_URL = "http://localhost:8082/products";
+    private final String CUSTOMER_SERVICE_URL = "http://customer-service:8082/customers";
+    private final String CATALOG_SERVICE_URL = "http://catalog-service:8083/catalog/product";
 
     @Override
     @Transactional
@@ -60,7 +60,7 @@ public class OrderServiceImpl implements OrderService {
             if (product == null) {
                 throw new IllegalArgumentException("Product not found: " + it.getProductId());
             }
-            if (product.getStock() < it.getQuantity()) {
+            if (product.getQuantityStock() < it.getQuantity()) {
                 throw new IllegalStateException("Insufficient stock for product: " + it.getProductId());
             }
 
@@ -118,12 +118,12 @@ public class OrderServiceImpl implements OrderService {
     public static class ProductInfo {
         private Long id;
         private Double price;
-        private Integer stock;
+        private Integer quantityStock;
         public Long getId(){return id;}
         public void setId(Long id){this.id=id;}
         public Double getPrice(){return price;}
         public void setPrice(Double price){this.price=price;}
-        public Integer getStock(){return stock;}
-        public void setStock(Integer stock){this.stock=stock;}
+        public Integer getQuantityStock(){return quantityStock;}
+        public void setQuantityStock(Integer quantityStock){this.quantityStock = quantityStock;}
     }
 }
