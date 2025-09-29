@@ -9,9 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import ru.meschanov.orderservice.dto.CreateOrderRequest;
+import ru.meschanov.orderservice.dto.OrderCreatedEvent;
 import ru.meschanov.orderservice.dto.OrderResponse;
 import ru.meschanov.orderservice.enumeration.OrderStatus;
-import ru.meschanov.orderservice.kafka.OrderProducer;
+import ru.meschanov.orderservice.kafka.OrderEventProducer;
+import ru.meschanov.orderservice.kafka.ProcessingProducer;
 import ru.meschanov.orderservice.model.Order;
 import ru.meschanov.orderservice.model.OrderItem;
 import ru.meschanov.orderservice.repository.OrderRepository;
@@ -26,7 +28,8 @@ import java.util.stream.Collectors;
 public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final RestTemplate restTemplate;
-    private final OrderProducer orderProducer;
+    private final ProcessingProducer processingProducer;
+    private final OrderEventProducer orderEventProducer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final String CUSTOMER_SERVICE_URL = "http://customer-service:8082/customers";
@@ -77,12 +80,30 @@ public class OrderServiceImpl implements OrderService {
         Order savedOrder = orderRepository.save(order);
 
 
+        // 3) Сообщение о создании заказа
         try {
-            String json = objectMapper.writeValueAsString(new OrderCreatedEvent(savedOrder.getId(), savedOrder.getCustomerId()));
-            orderProducer.publish(savedOrder.getId().toString(), json);
+            String json = objectMapper.writeValueAsString(new OrderCreatedEventRecord(savedOrder.getId(), savedOrder.getCustomerId()));
+            processingProducer.publish(savedOrder.getId().toString(), json);
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
+
+        // 4) Сообщение для изменения количества продукта на складе
+        OrderCreatedEvent event = new OrderCreatedEvent();
+        event.setOrderId(order.getId());
+        event.setCustomerId(order.getCustomerId());
+        event.setItems(
+                order.getItems().stream()
+                        .map(i -> {
+                            OrderCreatedEvent.Item evItem = new OrderCreatedEvent.Item();
+                            evItem.setProductId(i.getProductId());
+                            evItem.setQuantity(i.getQuantity());
+                            return evItem;
+                        })
+                        .toList()
+        );
+
+        orderEventProducer.publish(event);
 
         return toResponse(savedOrder);
     }
@@ -114,7 +135,7 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    public static record OrderCreatedEvent(Long orderId, Long customerId) {}
+    public record OrderCreatedEventRecord(Long orderId, Long customerId) {}
     public static class ProductInfo {
         private Long id;
         private Double price;
