@@ -6,9 +6,9 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class OrderProducer {
+public class ProcessingProducer {
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final String TOPIC = "orders";
+    private static final String TOPIC = "order-processing";
 
     public void publish(String key, String payload) {
         kafkaTemplate.send(TOPIC, key, payload);
